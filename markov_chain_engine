@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markov Chain Text Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&display=swap');
+        
+        :root {
+            --neon-green: #39ff14;
+            --deep-blue: #1e3a8a;
+            --highlight-yellow: #fde047;
+            --accent-brown: #a85507;
+        }
+
+        body { 
+            background-color: #000000; 
+            color: #e2e8f0; 
+            font-family: 'JetBrains Mono', monospace; 
+            overflow-x: hidden;
+        }
+
+        .panel { background: #0a0a0a; border: 1px solid #222; border-radius: 12px; position: relative; }
+        
+        /* SHARP USER-FRIENDLY OUTPUT */
+        #output span {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 3px;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+            background-color: #ffffff;
+            color: #111827;
+            font-weight: 700;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .word-pop { 
+            background-color: var(--highlight-yellow) !important; 
+            border-color: var(--accent-brown) !important;
+            box-shadow: 3px 3px 0px var(--accent-brown) !important;
+        }
+
+        /* PROBABILITY PROGRESS BARS */
+        .prob-bar-container { background: #111; padding: 12px; border-bottom: 1px solid #1a1a1a; }
+        .bar-bg { background: #222; height: 8px; width: 100%; border-radius: 4px; margin-top: 6px; overflow: hidden; }
+        .bar-fill { background: var(--neon-green); height: 100%; transition: width 0.8s ease; box-shadow: 0 0 10px var(--neon-green); }
+
+        /* INTERACTIVE MAP AREA */
+        #diagramContainer {
+            cursor: grab;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            background-image: radial-gradient(#1a1a1a 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+        #diagramContainer:active { cursor: grabbing; }
+
+        .action-btn {
+            background: #1a1a1a; border: 1px solid #333; color: #888;
+            padding: 6px 12px; font-size: 11px; border-radius: 6px;
+            transition: all 0.2s; font-weight: bold;
+        }
+        .action-btn:hover { background: var(--deep-blue); color: white; border-color: var(--neon-green); }
+        
+        .primary-btn {
+            background: var(--deep-blue); color: white; border-radius: 8px;
+            padding: 10px; font-weight: bold; letter-spacing: 1px;
+            transition: transform 0.1s, background 0.2s;
+        }
+        .primary-btn:active { transform: scale(0.96); }
+        .primary-btn:hover { background: #2563eb; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+<div class="max-w-[1600px] mx-auto">
+    <header class="mb-8 border-l-4 border-[#a85507] pl-5">
+        <h1 class="text-4xl font-bold text-white tracking-tighter uppercase">🔗 Markov Chain Engine</h1>
+        <p class="text-sm text-gray-500 mt-1 uppercase tracking-[0.2em]">
+            Stochastic <span class="text-[#fde047]">Pattern Mapping</span> & Generation
+        </p>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <div class="lg:col-span-4 space-y-6">
+            <div class="panel p-6 border-t-4 border-[#1e3a8a] shadow-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Build Markov Chain</h3>
+                    <button onclick="clearData()" class="text-[10px] text-red-500 hover:underline">RESET ALL</button>
+                </div>
+                
+                <textarea id="inputText" class="w-full h-40 bg-black border border-gray-800 rounded-lg p-4 text-sm outline-none focus:border-[#39ff14] transition-all" placeholder="Enter source text here...">Life is full of surprises. Life is a journey. Life is beautiful.</textarea>
+                
+                <div class="grid grid-cols-2 gap-4 mt-6">
+                    <div>
+                        <label class="text-[10px] text-gray-500 block mb-1 font-bold">NGRAM ORDER</label>
+                        <input type="number" id="order" value="1" min="1" max="3" class="w-full bg-black border border-gray-800 p-3 rounded text-sm text-[#39ff14]">
+                    </div>
+                    <div class="flex flex-col justify-end">
+                        <button onclick="runSimulation()" class="primary-btn uppercase text-xs">Generate Text</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel p-6 h-[480px] flex flex-col shadow-lg">
+                <h3 class="text-xs font-bold text-gray-400 mb-4 uppercase tracking-widest">Transition Logic</h3>
+                <div id="probPanel" class="flex-grow overflow-y-auto space-y-1">
+                    <div class="text-center text-gray-600 text-xs mt-20 italic">Run engine to view probabilities</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-8 space-y-6">
+            <div class="panel p-8 bg-white overflow-hidden shadow-2xl relative">
+                <div class="absolute top-3 right-3 flex gap-2">
+                    <button onclick="copyOutput()" class="action-btn !bg-gray-100 !border-gray-300">Copy</button>
+                    <button onclick="downloadOutput()" class="action-btn !bg-[#a85507] !text-white !border-none">Download .txt</button>
+                </div>
+                <div class="text-[10px] text-gray-400 font-bold mb-4 uppercase">Processed Result</div>
+                <div id="output" class="min-h-[80px] flex flex-wrap items-start"></div>
+            </div>
+
+            <div class="panel h-[580px] border border-gray-800 overflow-hidden flex flex-col shadow-lg">
+                <div class="bg-[#111] p-4 border-b border-gray-800 flex justify-between items-center">
+                    <div class="flex items-center gap-4">
+                        <span class="text-xs text-gray-300 font-bold uppercase tracking-wider">Architecture Map</span>
+                        <div class="flex gap-1">
+                            <button onclick="moveDiagram(0, 80)" class="action-btn" title="Up">↑</button>
+                            <button onclick="moveDiagram(0, -80)" class="action-btn" title="Down">↓</button>
+                            <button onclick="moveDiagram(80, 0)" class="action-btn" title="Left">←</button>
+                            <button onclick="moveDiagram(-80, 0)" class="action-btn" title="Right">→</button>
+                            <button onclick="adjustZoom(1.25)" class="action-btn !text-white" title="Zoom In">+</button>
+                            <button onclick="adjustZoom(0.75)" class="action-btn !text-white" title="Zoom Out">-</button>
+                            <button onclick="resetView()" class="action-btn !text-[#fde047] !border-[#a85507]">CENTER</button>
+                        </div>
+                    </div>
+                    <span class="text-[10px] text-[#39ff14] font-bold px-3 py-1 bg-[#39ff14]/5 rounded-full border border-[#39ff14]/20">SYSTEM READY</span>
+                </div>
+                <div id="diagramContainer"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    mermaid.initialize({ startOnLoad: false, theme: 'dark', themeVariables: { primaryColor: '#1e3a8a', edgeLabelBackground:'#000', fontSize: '15px' } });
+
+    let scale = 1, pointX = 0, pointY = 0;
+    const container = document.getElementById("diagramContainer");
+
+    function updateTransform() {
+        const target = container.querySelector('svg');
+        if(target) target.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+    }
+
+    function adjustZoom(f) { scale *= f; scale = Math.min(Math.max(0.15, scale), 6); updateTransform(); }
+    function moveDiagram(dx, dy) { pointX += dx; pointY += dy; updateTransform(); }
+    function resetView() { scale = 0.9; pointX = 0; pointY = 0; updateTransform(); }
+
+    // Drag Functionality
+    let isDragging = false, startPos = { x: 0, y: 0 };
+    container.onmousedown = (e) => { isDragging = true; startPos = { x: e.clientX - pointX, y: e.clientY - pointY }; };
+    window.onmousemove = (e) => { if (!isDragging) return; pointX = e.clientX - startPos.x; pointY = e.clientY - startPos.y; updateTransform(); };
+    window.onmouseup = () => isDragging = false;
+
+    // Simulation Engine
+    function runSimulation() {
+        const text = document.getElementById('inputText').value.trim();
+        const order = parseInt(document.getElementById('order').value);
+        if (!text) return;
+
+        const tokens = text.split(/\s+/).filter(t => t.length > 0);
+        let model = {};
+        for (let i = 0; i <= tokens.length - order; i++) {
+            let state = tokens.slice(i, i + order).join(" ");
+            let next = tokens[i + order];
+            if (!next) continue;
+            if (!model[state]) model[state] = [];
+            model[state].push(next);
+        }
+
+        let currentState = tokens.slice(0, order).join(" ");
+        let result = [...tokens.slice(0, order)];
+        for (let i = 0; i < 30; i++) {
+            let options = model[currentState];
+            if (!options) break;
+            let next = options[Math.floor(Math.random() * options.length)];
+            result.push(next);
+            currentState = result.slice(-order).join(" ");
+        }
+
+        // Output Generation
+        document.getElementById('output').innerHTML = result.map(word => {
+            const isPop = Math.random() > 0.88;
+            return `<span class="${isPop ? 'word-pop' : ''}">${word}</span>`;
+        }).join("");
+
+        // Probability Panel UI
+        let probHTML = "";
+        for (let state in model) {
+            let counts = {};
+            model[state].forEach(n => counts[n] = (counts[n] || 0) + 1);
+            probHTML += `<div class="text-[10px] text-[#a85507] font-bold mt-5 mb-2 uppercase border-b border-[#222] pb-1">Context: "${state}"</div>`;
+            for (let word in counts) {
+                let perc = ((counts[word] / model[state].length) * 100).toFixed(0);
+                probHTML += `
+                <div class="prob-bar-container">
+                    <div class="flex justify-between text-[11px] mb-1">
+                        <span class="text-gray-300">${word}</span>
+                        <span class="text-[#39ff14] font-bold">${perc}%</span>
+                    </div>
+                    <div class="bar-bg"><div class="bar-fill" style="width: ${perc}%"></div></div>
+                </div>`;
+            }
+        }
+        document.getElementById('probPanel').innerHTML = probHTML;
+        renderDiagram(model);
+    }
+
+    async function renderDiagram(model) {
+        let graphDef = "graph LR\n";
+        let count = 0;
+        const seen = new Set();
+        for (let state in model) {
+            if (count++ > 18) break;
+            let sId = state.replace(/\W/g, '');
+            [...new Set(model[state])].forEach(next => {
+                let tId = next.replace(/\W/g, '');
+                if (!seen.has(`${sId}-${tId}`)) {
+                    graphDef += `  ${sId}("${state}") --> ${tId}("${next}")\n`;
+                    seen.add(`${sId}-${tId}`);
+                }
+            });
+        }
+        container.innerHTML = `<div class="mermaid">${graphDef}</div>`;
+        await mermaid.run();
+        resetView();
+    }
+
+    // UTILITY FUNCTIONS
+    function clearData() {
+        document.getElementById('inputText').value = "";
+        document.getElementById('output').innerHTML = "";
+        document.getElementById('probPanel').innerHTML = "";
+        container.innerHTML = "";
+    }
+
+    function copyOutput() {
+        const text = document.getElementById('output').innerText;
+        navigator.clipboard.writeText(text);
+        alert("Copied to clipboard!");
+    }
+
+    function downloadOutput() {
+        const text = document.getElementById('output').innerText;
+        const blob = new Blob([text], { type: 'text/plain' });
+        const anchor = document.createElement('a');
+        anchor.download = "markov-output.txt";
+        anchor.href = window.URL.createObjectURL(blob);
+        anchor.click();
+    }
+
+    window.onload = runSimulation;
+</script>
+</body>
+</html>
